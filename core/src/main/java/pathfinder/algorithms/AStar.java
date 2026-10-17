@@ -11,25 +11,19 @@ public class AStar extends SearchAlgorithm {
 
     private final String name;
     private final BiFunction<Node, Node, Double> heuristic;
-    private final boolean heuristicAdmissible;
 
     /**
-     * @param name                 nome visualizzato
-     * @param heuristic            funzione (nodo, goal) → stima euristica
-     * @param heuristicAdmissible  true se h non sovrastima mai (per il flag optimal)
+     * @param name       nome visualizzato
+     * @param heuristic  funzione (nodo, goal) → stima euristica
      */
-    public AStar(String name,
-                 BiFunction<Node, Node, Double> heuristic,
-                 boolean heuristicAdmissible) {
-        this.name                 = name;
-        this.heuristic            = heuristic;
-        this.heuristicAdmissible  = heuristicAdmissible;
+    public AStar(String name, BiFunction<Node, Node, Double> heuristic) {
+        this.name      = name;
+        this.heuristic = heuristic;
     }
 
     public AStar() {
         this("A* (Manhattan)", (a, b) ->
-                (double)(Math.abs(a.getRow()-b.getRow()) + Math.abs(a.getCol()-b.getCol())),
-                true);
+                (double)(Math.abs(a.getRow()-b.getRow()) + Math.abs(a.getCol()-b.getCol())));
     }
 
     @Override
@@ -68,7 +62,7 @@ public class AStar extends SearchAlgorithm {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
                 return new SearchResult(getName(), path, visited,
-                        current.getGCost(), expanded, ms, heuristicAdmissible);
+                        current.getGCost(), expanded, ms, false);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
