@@ -3,6 +3,7 @@ package pathfinder.algorithms;
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,10 +11,8 @@ import java.util.List;
 
 public abstract class SearchAlgorithm {
 
-    // nome visualizzato nella UI
     public abstract String getName();
 
-    // grid griglia su cui cercare
     public abstract SearchResult search(Grid grid);
 
     protected List<Node> reconstructPath(Node goal) {
@@ -29,7 +28,7 @@ public abstract class SearchAlgorithm {
 
     protected double manhattan(Node a, Node b) {
         return Math.abs(a.getRow() - b.getRow())
-             + Math.abs(a.getCol() - b.getCol());
+                + Math.abs(a.getCol() - b.getCol());
     }
 
     protected double euclidean(Node a, Node b) {
@@ -38,8 +37,9 @@ public abstract class SearchAlgorithm {
         return Math.sqrt(dr * dr + dc * dc);
     }
 
-    protected SearchResult noPath(List<Node> visited, int expanded, long ms) {
-        return new SearchResult(getName(), List.of(), visited,
+    // Aggiornato per accettare la lista di SearchStep
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, long ms) {
+        return new SearchResult(getName(), List.of(), steps,
                 Double.MAX_VALUE, expanded, ms, false);
     }
 }

@@ -2,7 +2,9 @@ package pathfinder.algorithms;
 
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
+import pathfinder.model.NodeState;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,7 +14,7 @@ import java.util.Set;
 public class IterativeDeepeningDFS extends SearchAlgorithm {
 
     private int totalNodesExpanded;
-    private List<Node> visitedOrder;
+    private List<SearchStep> steps;
 
     @Override
     public String getName() {
@@ -30,8 +32,10 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
         }
 
         totalNodesExpanded = 0;
-        visitedOrder = new ArrayList<>();
+        steps = new ArrayList<>();
         int maxDepthLimit = grid.getRows() * grid.getCols();
+
+        steps.add(new SearchStep(start, NodeState.OPEN));
 
         for (int depth = 0; depth <= maxDepthLimit; depth++) {
             Set<Node> visitedInPath = new HashSet<>();
@@ -43,17 +47,17 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
                 for (int i = 0; i < path.size() - 1; i++) {
                     totalCost += path.get(i + 1).getCost();
                 }
-                return new SearchResult(getName(), path, visitedOrder, totalCost, totalNodesExpanded, duration, true);
+                return new SearchResult(getName(), path, steps, totalCost, totalNodesExpanded, duration, true);
             }
         }
 
         long duration = System.currentTimeMillis() - startTime;
-        return noPath(visitedOrder, totalNodesExpanded, duration);
+        return noPath(steps, totalNodesExpanded, duration);
     }
 
     private boolean dls(Node current, Node goal, int limit, Set<Node> visited, List<Node> path, Grid grid) {
         totalNodesExpanded++;
-        visitedOrder.add(current);
+        steps.add(new SearchStep(current, NodeState.CLOSED));
         path.add(current);
 
         if (current.equals(goal)) {
@@ -69,6 +73,7 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
 
         for (Node neighbor : grid.getNeighbors(current)) {
             if (!neighbor.isWall() && !visited.contains(neighbor)) {
+                steps.add(new SearchStep(neighbor, NodeState.OPEN));
                 if (dls(neighbor, goal, limit - 1, visited, path, grid)) {
                     return true;
                 }

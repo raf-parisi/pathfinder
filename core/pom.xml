@@ -15,15 +15,6 @@
     <packaging>jar</packaging>
     <name>AI Pathfinder - Core</name>
 
-
-    <dependencies>
-        <dependency>
-            <groupId>com.github.haifengl</groupId>
-            <artifactId>smile-core</artifactId>
-            <version>4.1.0</version>
-        </dependency>
-    </dependencies>
-
     <build>
         <plugins>
             <plugin>

@@ -2,7 +2,9 @@ package pathfinder.algorithms;
 
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
+import pathfinder.model.NodeState;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
 
 import java.util.*;
 
@@ -20,28 +22,29 @@ public class GreedyBestFirst extends SearchAlgorithm {
         Node goalNode  = grid.getGoalNode();
         if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
 
-        // Ordina per h(n)
         PriorityQueue<Node> open = new PriorityQueue<>(
                 Comparator.comparingDouble(Node::getHCost));
-        Set<Node>  closed  = new HashSet<>();
-        List<Node> visited = new ArrayList<>();
+        Set<Node>        closed = new HashSet<>();
+        List<SearchStep> steps  = new ArrayList<>();
 
         startNode.setGCost(0);
         startNode.setHCost(manhattan(startNode, goalNode));
         open.add(startNode);
+        steps.add(new SearchStep(startNode, NodeState.OPEN));
+
         int expanded = 0;
 
         while (!open.isEmpty()) {
             Node current = open.poll();
             if (closed.contains(current)) continue;
             closed.add(current);
-            visited.add(current);
+            steps.add(new SearchStep(current, NodeState.CLOSED));
             expanded++;
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
-                return new SearchResult(getName(), path, visited,
+                return new SearchResult(getName(), path, steps,
                         current.getGCost(), expanded, ms, false);
             }
 
@@ -53,10 +56,11 @@ public class GreedyBestFirst extends SearchAlgorithm {
                     neighbor.setHCost(manhattan(neighbor, goalNode));
                     neighbor.setParent(current);
                     open.add(neighbor);
+                    steps.add(new SearchStep(neighbor, NodeState.OPEN));
                 }
             }
         }
 
-        return noPath(visited, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, System.currentTimeMillis() - start);
     }
 }

@@ -2,7 +2,9 @@ package pathfinder.algorithms;
 
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
+import pathfinder.model.NodeState;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
 
 import java.util.*;
 
@@ -21,11 +23,14 @@ public class DFS extends SearchAlgorithm {
         if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
 
         Deque<Node> stack    = new ArrayDeque<>();
-        Set<Node>   visited  = new LinkedHashSet<>();  // ordine di visita
-        List<Node>  visitedList = new ArrayList<>();
+        Set<Node>   visited  = new HashSet<>();
+        List<SearchStep> steps = new ArrayList<>();
 
         stack.push(startNode);
         startNode.setGCost(0);
+        // Nota: Il nodo iniziale viene considerato OPEN quando entra nello stack
+        steps.add(new SearchStep(startNode, NodeState.OPEN));
+
         int expanded = 0;
 
         while (!stack.isEmpty()) {
@@ -33,13 +38,13 @@ public class DFS extends SearchAlgorithm {
 
             if (visited.contains(current)) continue;
             visited.add(current);
-            visitedList.add(current);
+            steps.add(new SearchStep(current, NodeState.CLOSED));
             expanded++;
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
-                return new SearchResult(getName(), path, visitedList,
+                return new SearchResult(getName(), path, steps,
                         path.size() - 1, expanded, ms, false);
             }
 
@@ -48,10 +53,16 @@ public class DFS extends SearchAlgorithm {
                     neighbor.setGCost(current.getGCost() + neighbor.getCost());
                     neighbor.setParent(current);
                     stack.push(neighbor);
+                    steps.add(new SearchStep(neighbor, NodeState.OPEN));
                 }
             }
         }
 
-        return noPath(visitedList, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, System.currentTimeMillis() - start);
+    }
+
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, long ms) {
+        return new SearchResult(getName(), List.of(), steps,
+                Double.MAX_VALUE, expanded, ms, false);
     }
 }

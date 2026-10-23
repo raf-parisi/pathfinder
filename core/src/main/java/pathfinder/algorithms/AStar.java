@@ -2,7 +2,9 @@ package pathfinder.algorithms;
 
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
+import pathfinder.model.NodeState;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
 
 import java.util.*;
 import java.util.function.BiFunction;
@@ -12,10 +14,6 @@ public class AStar extends SearchAlgorithm {
     private final String name;
     private final BiFunction<Node, Node, Double> heuristic;
 
-    /**
-     * @param name       nome visualizzato
-     * @param heuristic  funzione (nodo, goal) → stima euristica
-     */
     public AStar(String name, BiFunction<Node, Node, Double> heuristic) {
         this.name      = name;
         this.heuristic = heuristic;
@@ -38,31 +36,33 @@ public class AStar extends SearchAlgorithm {
         Node goalNode  = grid.getGoalNode();
         if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
 
-        // PQ ordinata per f(n) = g(n) + h(n)
         PriorityQueue<Node> open = new PriorityQueue<>(
                 Comparator.comparingDouble(Node::getFCost)
-                          .thenComparingDouble(n -> -n.getGCost())
-                          .thenComparingInt(Node::hashCode));
-        Set<Node>  closed  = new HashSet<>();
-        List<Node> visited = new ArrayList<>();
+                        .thenComparingDouble(n -> -n.getGCost())
+                        .thenComparingInt(Node::hashCode));
+        Set<Node>        closed = new HashSet<>();
+        List<SearchStep> steps  = new ArrayList<>();
 
         startNode.setGCost(0);
         startNode.setHCost(heuristic.apply(startNode, goalNode));
         open.add(startNode);
+        steps.add(new SearchStep(startNode, NodeState.OPEN));
+
         int expanded = 0;
 
         while (!open.isEmpty()) {
             Node current = open.poll();
             if (closed.contains(current)) continue;
             closed.add(current);
-            visited.add(current);
+            steps.add(new SearchStep(current, NodeState.CLOSED));
             expanded++;
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
-                return new SearchResult(getName(), path, visited,
-                        current.getGCost(), expanded, ms, false);
+                boolean allRoad = path.stream().allMatch(n -> n.getTerrain() == Node.Terrain.ROAD);
+                return new SearchResult(getName(), path, steps,
+                        current.getGCost(), expanded, ms, allRoad);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -73,10 +73,11 @@ public class AStar extends SearchAlgorithm {
                     neighbor.setHCost(heuristic.apply(neighbor, goalNode));
                     neighbor.setParent(current);
                     open.add(neighbor);
+                    steps.add(new SearchStep(neighbor, NodeState.OPEN));
                 }
             }
         }
 
-        return noPath(visited, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, System.currentTimeMillis() - start);
     }
 }
