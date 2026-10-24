@@ -20,7 +20,7 @@ public class BFS extends SearchAlgorithm {
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
 
         Queue<Node> frontier   = new ArrayDeque<>();
         Set<Node>   discovered = new HashSet<>();
@@ -32,8 +32,15 @@ public class BFS extends SearchAlgorithm {
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
+        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
 
         while (!frontier.isEmpty()) {
+            // Misuriamo l'occupazione totale in memoria (Frontiera + Visitati)
+            int currentMemory = frontier.size() + discovered.size();
+            if (currentMemory > maxNodesInMemory) {
+                maxNodesInMemory = currentMemory;
+            }
+
             Node current = frontier.poll();
             steps.add(new SearchStep(current, NodeState.CLOSED));
             expanded++;
@@ -44,7 +51,7 @@ public class BFS extends SearchAlgorithm {
                 boolean allRoad = path.stream()
                         .allMatch(n -> n.getTerrain() == Node.Terrain.ROAD);
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, ms, allRoad);
+                        current.getGCost(), expanded, maxNodesInMemory, ms, allRoad);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -58,11 +65,11 @@ public class BFS extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
     }
 
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, long ms) {
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
         return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, ms, false);
+                Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }

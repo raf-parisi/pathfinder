@@ -1,62 +1,83 @@
 package pathfinder.algorithms;
 
+import pathfinder.ml.PerlinGridGenerator;
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
 import pathfinder.model.SearchResult;
-import pathfinder.model.SearchStep;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.*;
 
-/**
- * Eseguibile con:
- *   mvn -pl core exec:java -Dexec.mainClass="pathfinder.algorithms.AlgorithmComparisonTest"
- */
 public class AlgorithmComparisonTest {
 
-    private static final int ROWS = 60;
-    private static final int COLS = 80;
-    private static final int NUM_GRIDS = 100;
+    private static final int NUM_GRIDS = 50;
     private static final int PAIRS_PER_GRID = 5;
-
-    private static final double[] WALL_DENSITIES = {0.0, 0.10, 0.20, 0.30};
-    private static final double MIN_REACHABLE_FRACTION = 0.4;
-
+    private static final long TIMEOUT_MS = 200;
     private static final long SEED = 2026L;
 
-    public static void main(String[] args) {
-        System.out.println("=== ALGORITHM COMPARISON TEST (costo uniforme + muri) ===\n");
+    private static final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-        for (double density : WALL_DENSITIES) {
-            System.out.printf("%n########## Densità muri: %.0f%% ##########%n%n", density * 100);
-            runBenchmark(density);
+    public static void main(String[] args) {
+        System.out.println("=== BENCHMARK COMPARATIVO ALGORITMI DI SEARCH ===");
+        System.out.println("Configurazione: " + NUM_GRIDS + " griglie, " + PAIRS_PER_GRID + " coppie/griglia, Timeout IDDFS/IDA*: " + TIMEOUT_MS + "ms\n");
+
+        int[][] dimensions = {{10, 10}, {20, 20}, {50, 80}};
+
+        for (int[] dim : dimensions) {
+            int rows = dim[0];
+            int cols = dim[1];
+
+            System.out.println("=========================================================================================");
+            System.out.printf("   DIMENSIONE GRIGLIA: %dx%d%n", rows, cols);
+            System.out.println("=========================================================================================");
+
+            runBenchmarkScenario(rows, cols, "SCENARIO A: Solo Strada", false, 0.0, false);
+            runBenchmarkScenario(rows, cols, "SCENARIO B: Strada + Muri", false, 0.20, true);
+            runBenchmarkScenario(rows, cols, "SCENARIO C: Terreni Variabili", true, 0.10, false);
         }
+
+        executor.shutdown();
     }
 
-    private static void runBenchmark(double wallDensity) {
-        Random seedRnd = new Random(SEED + (long)(wallDensity * 1000));
+    private static void runBenchmarkScenario(int rows, int cols, String scenarioTitle, boolean usePerlinFull, double density, boolean usePerlinWalls) {
+        System.out.printf("%n--- %s ---%n%n", scenarioTitle);
 
-        long expBFS = 0, expDFS = 0, expUCS = 0, expGreedy = 0, expAStar = 0, expHill = 0;
-        int optBFS = 0, optDFS = 0, optGreedy = 0, optAStar = 0, optHill = 0;
-        int noPathDFS = 0, noPathGreedy = 0, noPathHill = 0;
+        List<AlgorithmMetrics> metricsList = new ArrayList<>();
+        metricsList.add(new AlgorithmMetrics("UCS"));
+        metricsList.add(new AlgorithmMetrics("A* Manh."));
+        metricsList.add(new AlgorithmMetrics("A* Eucl."));
+        metricsList.add(new AlgorithmMetrics("IDA*"));
+        metricsList.add(new AlgorithmMetrics("IDDFS"));
+        metricsList.add(new AlgorithmMetrics("Greedy BF"));
+        metricsList.add(new AlgorithmMetrics("Hill Climb"));
+        metricsList.add(new AlgorithmMetrics("BFS"));
+        metricsList.add(new AlgorithmMetrics("DFS"));
+        metricsList.add(new AlgorithmMetrics("Bidirectional"));
 
-        double sumOvhBFS = 0; int cntSubOptBFS = 0;
-        double sumOvhDFS = 0; int cntSubOptDFS = 0;
-        double sumOvhGreedy = 0; int cntSubOptGreedy = 0;
-        double sumOvhHill = 0; int cntSubOptHill = 0;
-
-        long timeBFS = 0, timeDFS = 0, timeUCS = 0, timeGreedy = 0, timeAStar = 0, timeHill = 0;
+        Random seedRnd = new Random(SEED + rows * 31L + cols);
+        PerlinGridGenerator perlinGen = new PerlinGridGenerator(0.1, 0.3, 0.0, density);
 
         int totalPairs = 0;
 
         for (int g = 0; g < NUM_GRIDS; g++) {
-            Grid grid = generateWallGrid(ROWS, COLS, wallDensity, seedRnd.nextLong());
+            long currentSeed = seedRnd.nextLong();
+            Grid grid;
+
+            if (usePerlinFull) {
+                grid = perlinGen.generate(rows, cols, currentSeed);
+            } else if (usePerlinWalls) {
+                grid = generatePerlinWallGrid(rows, cols, density, currentSeed);
+            } else {
+                grid = new Grid(rows, cols);
+            }
 
             List<int[]> free = new ArrayList<>();
-            for (int r = 0; r < ROWS; r++)
-                for (int c = 0; c < COLS; c++)
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
                     if (!grid.get(r, c).isWall()) free.add(new int[]{r, c});
+
             if (free.size() < 2) continue;
 
             for (int p = 0; p < PAIRS_PER_GRID; p++) {
@@ -67,154 +88,161 @@ public class AlgorithmComparisonTest {
                 grid.setStart(free.get(si)[0], free.get(si)[1]);
                 grid.setGoal(free.get(gi)[0], free.get(gi)[1]);
 
-                Grid gBfs    = copyGridWithStartGoal(grid);
-                Grid gDfs    = copyGridWithStartGoal(grid);
-                Grid gUcs    = copyGridWithStartGoal(grid);
-                Grid gGreedy = copyGridWithStartGoal(grid);
-                Grid gAStar  = copyGridWithStartGoal(grid);
-                Grid gHill   = copyGridWithStartGoal(grid);
-
+                Grid gUcs = copyGrid(grid);
                 SearchResult rUcs = new UniformCostSearch().search(gUcs);
-                if (!rUcs.isPathFound()) continue; // coppia non raggiungibile, skip
-
-                SearchResult rBfs    = new BFS().search(gBfs);
-                SearchResult rDfs    = new DFS().search(gDfs);
-                SearchResult rGreedy = new GreedyBestFirst().search(gGreedy);
-                SearchResult rAStar  = new AStar().search(gAStar);
-                SearchResult rHill   = new HillClimbing().search(gHill);
+                if (!rUcs.isPathFound()) continue;
 
                 double optimalCost = rUcs.getTotalCost();
-
-                boolean bfsOpt    = rBfs.isPathFound()    && Math.abs(rBfs.getTotalCost()    - optimalCost) < 1e-6;
-                boolean dfsOpt    = rDfs.isPathFound()    && Math.abs(rDfs.getTotalCost()    - optimalCost) < 1e-6;
-                boolean greedyOpt = rGreedy.isPathFound() && Math.abs(rGreedy.getTotalCost() - optimalCost) < 1e-6;
-                boolean astarOpt  = rAStar.isPathFound()  && Math.abs(rAStar.getTotalCost()  - optimalCost) < 1e-6;
-                boolean hillOpt   = rHill.isPathFound()   && Math.abs(rHill.getTotalCost()   - optimalCost) < 1e-6;
-
-                if (rBfs.isPathFound() && !bfsOpt) {
-                    sumOvhBFS += (rBfs.getTotalCost() - optimalCost) / optimalCost * 100;
-                    cntSubOptBFS++;
-                }
-
-                if (!rDfs.isPathFound()) noPathDFS++;
-                else if (!dfsOpt) { sumOvhDFS += (rDfs.getTotalCost() - optimalCost) / optimalCost * 100; cntSubOptDFS++; }
-
-                if (!rGreedy.isPathFound()) noPathGreedy++;
-                else if (!greedyOpt) { sumOvhGreedy += (rGreedy.getTotalCost() - optimalCost) / optimalCost * 100; cntSubOptGreedy++; }
-
-                if (!rHill.isPathFound()) noPathHill++;
-                else if (!hillOpt) { sumOvhHill += (rHill.getTotalCost() - optimalCost) / optimalCost * 100; cntSubOptHill++; }
-
                 totalPairs++;
-                expBFS    += rBfs.getNodesExpanded();
-                expDFS    += rDfs.getNodesExpanded();
-                expUCS    += rUcs.getNodesExpanded();
-                expGreedy += rGreedy.getNodesExpanded();
-                expAStar  += rAStar.getNodesExpanded();
-                expHill   += rHill.getNodesExpanded();
 
-                timeBFS    += rBfs.getExecutionTimeMs();
-                timeDFS    += rDfs.getExecutionTimeMs();
-                timeUCS    += rUcs.getExecutionTimeMs();
-                timeGreedy += rGreedy.getExecutionTimeMs();
-                timeAStar  += rAStar.getExecutionTimeMs();
-                timeHill   += rHill.getExecutionTimeMs();
+                getMetrics("UCS", metricsList).recordResult(rUcs, optimalCost);
 
-                if (bfsOpt)    optBFS++;
-                if (dfsOpt)    optDFS++;
-                if (greedyOpt) optGreedy++;
-                if (astarOpt)  optAStar++;
-                if (hillOpt)   optHill++;
+                for (AlgorithmMetrics m : metricsList) {
+                    if (m.name.equals("UCS")) continue;
+
+                    SearchAlgorithm algo = instantiateAlgorithm(m.name);
+                    if (algo == null) continue;
+
+                    Grid copy = copyGrid(grid);
+
+                    if (m.name.equals("IDDFS") || m.name.equals("IDA*")) {
+                        runWithTimeoutAndRecord(algo, copy, TIMEOUT_MS, m, optimalCost);
+                    } else {
+                        SearchResult res = algo.search(copy);
+                        m.recordResult(res, optimalCost);
+                    }
+                }
             }
         }
 
         if (totalPairs == 0) {
-            System.out.println("Nessuna coppia valida generata a questa densità.");
+            System.out.println("Nessuna coppia valida testata.");
             return;
         }
 
-        System.out.printf("Coppie testate: %d%n%n", totalPairs);
-        System.out.printf("%-12s %10s %8s %10s %10s %12s%n",
-                "Algoritmo", "Nodi med.", "Tempo", "Ottimale", "%Ottim.", "Overhead med.");
-        System.out.println("-".repeat(70));
+        System.out.printf("%-14s %12s %12s %9s %10s %12s %14s%n",
+                "Algoritmo", "Nodi espansi", "Max Mem.", "Tempo", "%Ottim.", "Overhead", "Fail/Timeout");
+        System.out.println("-".repeat(90));
 
-        printRow("UCS",       expUCS,    timeUCS,    totalPairs, totalPairs, totalPairs, 0, 0);
-        printRow("BFS",       expBFS,    timeBFS,    totalPairs, optBFS,     totalPairs, sumOvhBFS, cntSubOptBFS);
-        printRow("DFS",       expDFS,    timeDFS,    totalPairs, optDFS,     totalPairs, sumOvhDFS, cntSubOptDFS);
-        printRow("Greedy BF", expGreedy, timeGreedy, totalPairs, optGreedy,  totalPairs, sumOvhGreedy, cntSubOptGreedy);
-        printRow("A* Manh.",  expAStar,  timeAStar,  totalPairs, optAStar,   totalPairs, 0, 0);
-        printRow("Hill Climb",expHill,   timeHill,   totalPairs, optHill,    totalPairs, sumOvhHill, cntSubOptHill);
-
-        System.out.println("\nTasso di fallimento completo (nessun percorso trovato):");
-        System.out.printf("  DFS:        %d/%d (%.1f%%)%n", noPathDFS, totalPairs, 100.0 * noPathDFS / totalPairs);
-        System.out.printf("  Greedy BF:  %d/%d (%.1f%%)%n", noPathGreedy, totalPairs, 100.0 * noPathGreedy / totalPairs);
-        System.out.printf("  Hill Climb: %d/%d (%.1f%%)%s%n", noPathHill, totalPairs, 100.0 * noPathHill / totalPairs,
-                wallDensity == 0.0 ? "  (atteso 0% senza muri: niente minimi locali)" : "");
-    }
-
-    private static void printRow(String name, long expanded, long timeMs, int total,
-                                 int optimal, int optimalDenom, double sumOvh, int cntSubOpt) {
-        double avgExp = (double) expanded / total;
-        double avgTime = (double) timeMs / total;
-        double optPct = 100.0 * optimal / optimalDenom;
-        String ovhStr = cntSubOpt > 0 ? String.format("%.1f%%", sumOvh / cntSubOpt) : "-";
-        System.out.printf("%-12s %10.1f %7.2fms %5d/%-4d %9.1f%% %12s%n",
-                name, avgExp, avgTime, optimal, optimalDenom, optPct, ovhStr);
-    }
-
-    private static Grid generateWallGrid(int rows, int cols, double wallDensity, long seed) {
-        int maxAttempts = 10;
-        for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            Grid grid = new Grid(rows, cols);
-            Random rnd = new Random(seed + attempt);
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    if (rnd.nextDouble() < wallDensity)
-                        grid.get(r, c).setType(Node.Type.WALL);
-
-            if (reachableFraction(grid) >= MIN_REACHABLE_FRACTION) return grid;
+        for (AlgorithmMetrics m : metricsList) {
+            m.printRow(totalPairs);
         }
-        return new Grid(rows, cols);
     }
 
-    private static double reachableFraction(Grid grid) {
-        int rows = grid.getRows(), cols = grid.getCols();
-        Node start = null;
-        outer:
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-                if (!grid.get(r, c).isWall()) { start = grid.get(r, c); break outer; }
-        if (start == null) return 0;
+    private static Grid generatePerlinWallGrid(int rows, int cols, double wallDensity, long seed) {
+        PerlinGridGenerator generator = new PerlinGridGenerator(0.1, 1.0, 1.0, wallDensity);
+        return generator.generate(rows, cols, seed);
+    }
 
-        boolean[][] visited = new boolean[rows][cols];
-        java.util.Queue<Node> queue = new java.util.ArrayDeque<>();
-        queue.add(start);
-        visited[start.getRow()][start.getCol()] = true;
-        int reached = 0, total = 0;
+    private static void runWithTimeoutAndRecord(SearchAlgorithm algo, Grid grid, long timeoutMs, AlgorithmMetrics metrics, double optimalCost) {
+        Future<SearchResult> future = executor.submit(() -> algo.search(grid));
+        try {
+            SearchResult res = future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            metrics.recordResult(res, optimalCost);
+        } catch (TimeoutException | InterruptedException | ExecutionException e) {
+            future.cancel(true);
+            long partialNodes = 0;
+            long partialMaxMem = 0;
+            if (algo instanceof IDAStar) {
+                partialNodes = ((IDAStar) algo).getLastNodesExpanded();
+            } else if (algo instanceof IterativeDeepeningDFS) {
+                partialNodes = ((IterativeDeepeningDFS) algo).getTotalNodesExpanded();
+                partialMaxMem = ((IterativeDeepeningDFS) algo).getMaxNodesInMemory();
+            }
+            metrics.recordTimeout(timeoutMs, partialNodes, partialMaxMem);
+        }
+    }
 
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-                if (!grid.get(r, c).isWall()) total++;
+    private static SearchAlgorithm instantiateAlgorithm(String name) {
+        return switch (name) {
+            case "BFS" -> new BFS();
+            case "DFS" -> new DFS();
+            case "UCS" -> new UniformCostSearch();
+            case "Greedy BF" -> new GreedyBestFirst();
+            case "A* Manh." -> new AStar("A* (Manhattan)", (a, b) ->
+                    (double)(Math.abs(a.getRow() - b.getRow()) + Math.abs(a.getCol() - b.getCol())));
+            case "A* Eucl." -> new AStar("A* (Euclidea)", (a, b) ->
+                    Math.hypot(a.getRow() - b.getRow(), a.getCol() - b.getCol()));
+            case "Hill Climb" -> new HillClimbing();
+            case "IDDFS" -> new IterativeDeepeningDFS();
+            case "IDA*" -> new IDAStar();
+            case "Bidirectional" -> new BidirectionalSearch();
+            default -> null;
+        };
+    }
 
-        while (!queue.isEmpty()) {
-            Node n = queue.poll();
-            reached++;
-            for (Node nb : grid.getNeighbors(n)) {
-                if (!visited[nb.getRow()][nb.getCol()]) {
-                    visited[nb.getRow()][nb.getCol()] = true;
-                    queue.add(nb);
-                }
+    private static AlgorithmMetrics getMetrics(String name, List<AlgorithmMetrics> list) {
+        for (AlgorithmMetrics m : list) if (m.name.equals(name)) return m;
+        return null;
+    }
+
+    private static Grid copyGrid(Grid original) {
+        Grid copy = original.copyWalls();
+        for (int r = 0; r < original.getRows(); r++) {
+            for (int c = 0; c < original.getCols(); c++) {
+                copy.setTerrain(r, c, original.get(r, c).getTerrain());
             }
         }
-        return total == 0 ? 0 : (double) reached / total;
-    }
-
-    private static Grid copyGridWithStartGoal(Grid original) {
-        Grid copy = original.copyWalls();
         Node s = original.getStartNode();
         Node g = original.getGoalNode();
         if (s != null) copy.setStart(s.getRow(), s.getCol());
         if (g != null) copy.setGoal(g.getRow(), g.getCol());
         return copy;
+    }
+
+    private static class AlgorithmMetrics {
+        String name;
+        long totalExpanded = 0;
+        long totalMaxMemory = 0;
+        long totalTimeMs = 0;
+        int optimalCount = 0;
+        int successCount = 0;
+        double sumOverhead = 0;
+        int timeoutsOrFailures = 0;
+
+        AlgorithmMetrics(String name) {
+            this.name = name;
+        }
+
+        void recordResult(SearchResult res, double optimalCost) {
+            totalExpanded += res.getNodesExpanded();
+            totalMaxMemory += res.getMaxNodesInMemory();
+            totalTimeMs += res.getExecutionTimeMs();
+
+            if (!res.isPathFound()) {
+                timeoutsOrFailures++;
+                return;
+            }
+
+            successCount++;
+
+            boolean isOpt = Math.abs(res.getTotalCost() - optimalCost) < 1e-6;
+            if (isOpt) {
+                optimalCount++;
+            }
+
+            double overhead = ((res.getTotalCost() - optimalCost) / optimalCost) * 100.0;
+            sumOverhead += overhead;
+        }
+
+        void recordTimeout(long timeoutMs, long partialNodes, long partialMaxMem) {
+            timeoutsOrFailures++;
+            totalExpanded += partialNodes;
+            totalMaxMemory += partialMaxMem;
+            totalTimeMs += timeoutMs;
+        }
+
+        void printRow(int totalPairs) {
+            double avgExp = (double) totalExpanded / totalPairs;
+            double avgMem = (double) totalMaxMemory / totalPairs;
+            double avgTime = (double) totalTimeMs / totalPairs;
+            double optPct = 100.0 * optimalCount / totalPairs;
+
+            String ovhStr = successCount > 0 ? String.format("%.1f%%", sumOverhead / successCount) : "-";
+            String failStr = String.format("%d/%d", timeoutsOrFailures, totalPairs);
+
+            System.out.printf("%-14s %12.1f %12.1f %7.2fms %10.1f%% %12s %14s%n",
+                    name, avgExp, avgMem, avgTime, optPct, ovhStr, failStr);
+        }
     }
 }

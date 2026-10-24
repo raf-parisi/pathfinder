@@ -4,36 +4,29 @@ import javafx.animation.AnimationTimer;
 import pathfinder.gui.components.GridCanvas;
 import pathfinder.model.Node;
 import pathfinder.model.SearchResult;
+import pathfinder.model.SearchStep;
+import pathfinder.model.NodeState;
 
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * Gestisce la riproduzione animata di un risultato di ricerca sulla griglia.
- *
- * Mostra i nodi visitati uno per volta nell'ordine in cui l'algoritmo
- * li ha espansi, poi disegna il percorso finale.
- *
- * Modalità:
- *   play()  — avanza automaticamente a velocità fissa
- *   step()  — avanza di un nodo per chiamata
- *   skipToEnd() — mostra tutto immediatamente
- */
 public class SearchAnimator {
 
-    private static final long DELAY_NS = 8_000_000L; // ~8ms per nodo
+    private static final long DELAY_NS = 8_000_000L; // ~8ms per step
 
     private final GridCanvas canvas;
 
-    private List<Node>   visitedNodes;
-    private List<Node>   path;
-    private SearchResult result;
-    private int          cursor = 0;
-    private boolean      done   = false;
+    private List<SearchStep> steps;
+    private List<Node>       path;
+    private SearchResult     result;
+    private Node             startNode;
+    private int              startClosedCount = 0;
+    private int              cursor = 0;
+    private boolean          done   = false;
 
-    private AnimationTimer          timer;
-    private long                    lastTime = 0;
-    private Consumer<SearchResult>  onDone;
+    private AnimationTimer         timer;
+    private long                   lastTime = 0;
+    private Consumer<SearchResult> onDone;
 
     public SearchAnimator(GridCanvas canvas) {
         this.canvas = canvas;
@@ -41,12 +34,16 @@ public class SearchAnimator {
 
     public void load(SearchResult r, Consumer<SearchResult> onDone) {
         stop();
-        this.result       = r;
-        this.visitedNodes = r.getVisitedNodes();
-        this.path         = r.getPath();
-        this.cursor       = 0;
-        this.done         = false;
-        this.onDone       = onDone;
+        this.result = r;
+        this.steps  = r.getSteps();
+        this.path   = r.getPath();
+        this.cursor = 0;
+        this.done   = false;
+        this.onDone = onDone;
+
+        this.startNode        = (steps != null && !steps.isEmpty()) ? steps.get(0).node() : null;
+        this.startClosedCount = 0;
+
         canvas.clearOverlay();
         canvas.redraw();
     }
@@ -77,18 +74,41 @@ public class SearchAnimator {
         return more;
     }
 
-
     public void skipToEnd() {
         stop();
-        while (cursor < visitedNodes.size())
-            canvas.markVisited(visitedNodes.get(cursor++));
+        if (steps != null) {
+            while (cursor < steps.size()) {
+                SearchStep step = steps.get(cursor++);
+                if (startNode != null && step.node().equals(startNode) && step.state() == NodeState.CLOSED) {
+                    startClosedCount++;
+                    if (startClosedCount > 1) {
+                        canvas.clearOverlay();
+                        canvas.redraw();
+                    }
+                }
+                canvas.applyStep(step);
+            }
+        }
         finish();
     }
 
     private boolean advance() {
-        if (cursor >= visitedNodes.size()) return false;
-        canvas.markVisited(visitedNodes.get(cursor++));
-        return cursor < visitedNodes.size();
+        if (steps == null || cursor >= steps.size()) return false;
+
+        SearchStep step = steps.get(cursor++);
+
+        // Ogni volta che l'IDDFS inizia una nuova iterazione, chiama dls sullo start
+        // aggiungendo un nuovo step (start, CLOSED). Dalla seconda volta in poi, azzeriamo la grafica!
+        if (startNode != null && step.node().equals(startNode) && step.state() == NodeState.CLOSED) {
+            startClosedCount++;
+            if (startClosedCount > 1) {
+                canvas.clearOverlay();
+                canvas.redraw();
+            }
+        }
+
+        canvas.applyStep(step);
+        return cursor < steps.size();
     }
 
     private void finish() {
@@ -99,5 +119,5 @@ public class SearchAnimator {
 
     public boolean isDone()    { return done; }
     public int     getCursor() { return cursor; }
-    public int     getTotal()  { return visitedNodes == null ? 0 : visitedNodes.size(); }
+    public int     getTotal()  { return steps == null ? 0 : steps.size(); }
 }

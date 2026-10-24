@@ -34,7 +34,7 @@ public class AStar extends SearchAlgorithm {
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
 
         PriorityQueue<Node> open = new PriorityQueue<>(
                 Comparator.comparingDouble(Node::getFCost)
@@ -49,8 +49,15 @@ public class AStar extends SearchAlgorithm {
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
+        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
 
         while (!open.isEmpty()) {
+            // Memoria corrente = Open + Closed
+            int currentMemory = open.size() + closed.size();
+            if (currentMemory > maxNodesInMemory) {
+                maxNodesInMemory = currentMemory;
+            }
+
             Node current = open.poll();
             if (closed.contains(current)) continue;
             closed.add(current);
@@ -62,7 +69,7 @@ public class AStar extends SearchAlgorithm {
                 long ms = System.currentTimeMillis() - start;
                 boolean allRoad = path.stream().allMatch(n -> n.getTerrain() == Node.Terrain.ROAD);
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, ms, allRoad);
+                        current.getGCost(), expanded, maxNodesInMemory, ms, allRoad);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -78,6 +85,11 @@ public class AStar extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
+    }
+
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
+        return new SearchResult(getName(), List.of(), steps,
+                Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }

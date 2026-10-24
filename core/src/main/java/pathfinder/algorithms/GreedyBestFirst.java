@@ -20,7 +20,7 @@ public class GreedyBestFirst extends SearchAlgorithm {
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
 
         PriorityQueue<Node> open = new PriorityQueue<>(
                 Comparator.comparingDouble(Node::getHCost));
@@ -33,8 +33,14 @@ public class GreedyBestFirst extends SearchAlgorithm {
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
+        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
 
         while (!open.isEmpty()) {
+            int currentMemory = open.size() + closed.size();
+            if (currentMemory > maxNodesInMemory) {
+                maxNodesInMemory = currentMemory;
+            }
+
             Node current = open.poll();
             if (closed.contains(current)) continue;
             closed.add(current);
@@ -45,7 +51,7 @@ public class GreedyBestFirst extends SearchAlgorithm {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, ms, false);
+                        current.getGCost(), expanded, maxNodesInMemory, ms, false);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -61,6 +67,11 @@ public class GreedyBestFirst extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
+    }
+
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
+        return new SearchResult(getName(), List.of(), steps,
+                Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }

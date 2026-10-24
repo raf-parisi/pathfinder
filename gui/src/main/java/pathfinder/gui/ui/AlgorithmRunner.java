@@ -2,7 +2,6 @@ package pathfinder.gui.ui;
 
 import javafx.concurrent.Task;
 import pathfinder.algorithms.*;
-import pathfinder.ml.HeuristicTrainer;
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
 import pathfinder.model.SearchResult;
@@ -12,11 +11,9 @@ import java.util.function.Consumer;
 
 public class AlgorithmRunner {
 
-    private final HeuristicTrainer trainer;
     private List<SearchAlgorithm> algorithms;
 
-    public AlgorithmRunner(HeuristicTrainer trainer) {
-        this.trainer = trainer;
+    public AlgorithmRunner() {
         buildAlgorithms();
     }
 
@@ -34,7 +31,9 @@ public class AlgorithmRunner {
                             return Math.sqrt(dr * dr + dc * dc);
                         }),
                 new IDAStar(),
-                new HillClimbing()
+                new HillClimbing(),
+                new BidirectionalSearch(),
+                new IterativeDeepeningDFS()
         );
     }
 
@@ -42,16 +41,11 @@ public class AlgorithmRunner {
         return algorithms.stream().map(SearchAlgorithm::getName).toList();
     }
 
-    /** Nome di A* OLS — usato per il RadioButton. */
-    public String getMLOLSName() {
-        return buildAStarOLS(null).getName();
-    }
-
     public void run(String algoName, Grid grid,
                     Consumer<SearchResult> onDone,
                     Consumer<Throwable>    onError) {
 
-        SearchAlgorithm algo = findAlgorithm(algoName, grid);
+        SearchAlgorithm algo = findAlgorithm(algoName);
         Grid copy = copyGrid(grid);
 
         Task<SearchResult> task = new Task<>() {
@@ -66,21 +60,11 @@ public class AlgorithmRunner {
         t.start();
     }
 
-    private SearchAlgorithm findAlgorithm(String name, Grid grid) {
+    private SearchAlgorithm findAlgorithm(String name) {
         for (SearchAlgorithm a : algorithms)
             if (a.getName().equals(name)) return a;
 
-        if (name.equals(buildAStarOLS(null).getName()))
-            return buildAStarOLS(grid);
-
         throw new IllegalArgumentException("Algoritmo non trovato: " + name);
-    }
-
-    private AStar buildAStarOLS(Grid referenceGrid) {
-        return new AStar(
-                "A* (OLS)",
-                (node, goal) -> trainer.predict(node, goal, referenceGrid, node.getGCost())
-        );
     }
 
     private Grid copyGrid(Grid original) {
@@ -91,6 +75,4 @@ public class AlgorithmRunner {
         if (g != null) copy.setGoal(g.getRow(), g.getCol());
         return copy;
     }
-
-    public boolean isMLTrained() { return trainer.isTrained(); }
 }

@@ -14,11 +14,20 @@ import java.util.Set;
 public class IterativeDeepeningDFS extends SearchAlgorithm {
 
     private int totalNodesExpanded;
+    private int maxNodesInMemory; // Campo per tracciare il picco di memoria
     private List<SearchStep> steps;
 
     @Override
     public String getName() {
         return "IDDFS (Iterative Deepening DFS)";
+    }
+
+    public int getTotalNodesExpanded() {
+        return totalNodesExpanded;
+    }
+
+    public int getMaxNodesInMemory() {
+        return maxNodesInMemory;
     }
 
     @Override
@@ -28,10 +37,11 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
         Node goal = grid.getGoalNode();
 
         if (start == null || goal == null) {
-            return noPath(List.of(), 0, System.currentTimeMillis() - startTime);
+            return noPath(List.of(), 0, 0, System.currentTimeMillis() - startTime);
         }
 
         totalNodesExpanded = 0;
+        maxNodesInMemory = 0;
         steps = new ArrayList<>();
         int maxDepthLimit = grid.getRows() * grid.getCols();
 
@@ -47,18 +57,23 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
                 for (int i = 0; i < path.size() - 1; i++) {
                     totalCost += path.get(i + 1).getCost();
                 }
-                return new SearchResult(getName(), path, steps, totalCost, totalNodesExpanded, duration, true);
+                return new SearchResult(getName(), path, steps, totalCost, totalNodesExpanded, maxNodesInMemory, duration, true);
             }
         }
 
         long duration = System.currentTimeMillis() - startTime;
-        return noPath(steps, totalNodesExpanded, duration);
+        return noPath(steps, totalNodesExpanded, maxNodesInMemory, duration);
     }
 
     private boolean dls(Node current, Node goal, int limit, Set<Node> visited, List<Node> path, Grid grid) {
         totalNodesExpanded++;
         steps.add(new SearchStep(current, NodeState.CLOSED));
         path.add(current);
+
+        int currentMem = path.size() + visited.size();
+        if (currentMem > maxNodesInMemory) {
+            maxNodesInMemory = currentMem;
+        }
 
         if (current.equals(goal)) {
             return true;
@@ -83,5 +98,9 @@ public class IterativeDeepeningDFS extends SearchAlgorithm {
         visited.remove(current);
         path.remove(path.size() - 1);
         return false;
+    }
+
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
+        return new SearchResult(getName(), List.of(), steps, Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }

@@ -5,6 +5,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
+import pathfinder.model.NodeState;
 
 import java.util.HashSet;
 import java.util.List;
@@ -12,7 +13,6 @@ import java.util.Set;
 
 public class GridCanvas extends Canvas {
 
-    // Default — modificabili tramite setDimensions()
     public static final int DEFAULT_ROWS = 60;
     public static final int DEFAULT_COLS = 80;
     public static final int DEFAULT_CELL = 12;
@@ -27,23 +27,29 @@ public class GridCanvas extends Canvas {
     private static final Color C_WALL    = Color.DARKSLATEGRAY;
     private static final Color C_START   = Color.GREEN;
     private static final Color C_GOAL    = Color.RED;
-    private static final Color C_VISITED = Color.web("#ffd580");
+    private static final Color C_OPEN    = Color.web("#89c4ff"); // Ciano per la frontiera
+    private static final Color C_CLOSED  = Color.web("#ffd580"); // Arancione chiaro per esplorati
     private static final Color C_PATH    = Color.ORANGE;
     private static final Color C_GRID    = Color.LIGHTGRAY;
 
-    public enum EditMode { WALL, START, GOAL, ROAD, GRASS, WATER }
+    public enum EditMode { WALL, ROAD, GRASS, WATER }
 
     private Grid     grid;
     private EditMode editMode = EditMode.WALL;
 
-    private Set<Node> visitedSet = new HashSet<>();
-    private Set<Node> pathSet    = new HashSet<>();
+    private Set<Node> openSet   = new HashSet<>();
+    private Set<Node> closedSet = new HashSet<>();
+    private Set<Node> pathSet   = new HashSet<>();
 
     private Runnable onChanged;
 
     private int     lastDragRow  = -1;
     private int     lastDragCol  = -1;
     private Boolean dragPainting = null;
+
+    // Gestione Drag & Drop per Start e Goal
+    private enum DragTarget { NONE, START, GOAL, PAINTING }
+    private DragTarget currentDragTarget = DragTarget.NONE;
 
     public GridCanvas() {
         this(DEFAULT_ROWS, DEFAULT_COLS, DEFAULT_CELL);
@@ -57,17 +63,10 @@ public class GridCanvas extends Canvas {
         setupMouse();
     }
 
-    // ── dimensioni ───────────────────────────────────────────────────────
-
     public int getRows() { return rows; }
     public int getCols() { return cols; }
     public int getCell() { return cell; }
 
-    /**
-     * Cambia dimensioni e/o taglia cella.
-     * Crea una nuova griglia internamente e la restituisce
-     * per permettere all'AppController di aggiornarsi.
-     */
     public Grid resize(int newRows, int newCols, int newCell) {
         this.rows = newRows;
         this.cols = newCols;
@@ -80,33 +79,37 @@ public class GridCanvas extends Canvas {
         return newGrid;
     }
 
-    // ── grid ─────────────────────────────────────────────────────────────
-
     public void setGrid(Grid g)          { this.grid = g; clearOverlay(); redraw(); }
     public void setEditMode(EditMode m)  { this.editMode = m; }
     public void setOnChanged(Runnable r) { this.onChanged = r; }
 
-    // ── overlay ──────────────────────────────────────────────────────────
+    public void clearOverlay() {
+        openSet.clear();
+        closedSet.clear();
+        pathSet.clear();
+    }
 
-    public void clearOverlay() { visitedSet.clear(); pathSet.clear(); }
+    public void applyStep(pathfinder.model.SearchStep step) {
+        boolean stateChanged = false;
 
-    public void markVisited(Node n) {
-        visitedSet.add(n);
-        drawCell(getGraphicsContext2D(), n);
+        if (step.state() == NodeState.OPEN) {
+            stateChanged = openSet.add(step.node()); // True se il nodo non era già in openSet
+        } else if (step.state() == NodeState.CLOSED) {
+            boolean removedFromOpen = openSet.remove(step.node());
+            boolean addedToClosed   = closedSet.add(step.node());
+            stateChanged = removedFromOpen || addedToClosed; // True se si è mosso da open a closed o è nuovo
+        }
+
+        // Ridisegna la cella SOLO SE lo stato è realmente cambiato!
+        if (stateChanged) {
+            drawCell(getGraphicsContext2D(), step.node());
+        }
     }
 
     public void showPath(List<Node> path) {
         pathSet = new HashSet<>(path);
         redraw();
     }
-
-    public void showResult(List<Node> visited, List<Node> path) {
-        visitedSet = new HashSet<>(visited);
-        pathSet    = new HashSet<>(path);
-        redraw();
-    }
-
-    // ── rendering ────────────────────────────────────────────────────────
 
     public void redraw() {
         if (grid == null) return;
@@ -125,7 +128,8 @@ public class GridCanvas extends Canvas {
         else if (node.isStart())             fill = C_START;
         else if (node.isGoal())              fill = C_GOAL;
         else if (pathSet.contains(node))     fill = C_PATH;
-        else if (visitedSet.contains(node))  fill = C_VISITED;
+        else if (closedSet.contains(node))   fill = C_CLOSED;
+        else if (openSet.contains(node))     fill = C_OPEN;
         else                                 fill = terrainColor(node.getTerrain());
 
         gc.setFill(fill);
@@ -152,17 +156,21 @@ public class GridCanvas extends Canvas {
         gc.fillText(lbl, x + cell * 0.2, y + cell * 0.75);
     }
 
-    // ── mouse ────────────────────────────────────────────────────────────
-
     private void setupMouse() {
         setOnMousePressed(e -> {
             lastDragRow  = -1;
             lastDragCol  = -1;
             dragPainting = null;
+            currentDragTarget = DragTarget.NONE;
             handle(e.getX(), e.getY(), true);
         });
         setOnMouseDragged(e -> handle(e.getX(), e.getY(), false));
-        setOnMouseReleased(e -> { lastDragRow = -1; lastDragCol = -1; dragPainting = null; });
+        setOnMouseReleased(e -> {
+            lastDragRow = -1;
+            lastDragCol = -1;
+            dragPainting = null;
+            currentDragTarget = DragTarget.NONE;
+        });
     }
 
     private void handle(double px, double py, boolean isPress) {
@@ -171,32 +179,55 @@ public class GridCanvas extends Canvas {
         if (r < 0 || r >= rows || c < 0 || c >= cols) return;
         Node n = grid.get(r, c);
 
-        switch (editMode) {
-            case WALL -> {
-                if (n.isStart() || n.isGoal()) return;
-                if (r == lastDragRow && c == lastDragCol) return;
-                lastDragRow = r; lastDragCol = c;
-                if (isPress) dragPainting = !n.isWall();
-                if (dragPainting != null) {
-                    if ( dragPainting && !n.isWall()) { grid.toggleWall(r, c); clearOverlay(); }
-                    if (!dragPainting &&  n.isWall()) { grid.toggleWall(r, c); clearOverlay(); }
+        if (isPress) {
+            if (n.isStart()) {
+                currentDragTarget = DragTarget.START;
+            } else if (n.isGoal()) {
+                currentDragTarget = DragTarget.GOAL;
+            } else {
+                currentDragTarget = DragTarget.PAINTING;
+                if (editMode == EditMode.WALL) {
+                    dragPainting = !n.isWall();
                 }
             }
-            case START -> { if (!n.isWall() && !n.isGoal())  grid.setStart(r, c); }
-            case GOAL  -> { if (!n.isWall() && !n.isStart()) grid.setGoal(r, c); }
-            case ROAD, GRASS, WATER -> {
-                if (n.isWall() || n.isStart() || n.isGoal()) return;
-                if (r == lastDragRow && c == lastDragCol) return;
-                lastDragRow = r; lastDragCol = c;
-                Node.Terrain t = switch (editMode) {
-                    case GRASS -> Node.Terrain.GRASS;
-                    case WATER -> Node.Terrain.WATER;
-                    default    -> Node.Terrain.ROAD;
-                };
-                grid.setTerrain(r, c, t);
+        }
+
+        if (currentDragTarget == DragTarget.START) {
+            if (!n.isWall() && !n.isGoal()) {
+                grid.setStart(r, c);
                 clearOverlay();
             }
+        } else if (currentDragTarget == DragTarget.GOAL) {
+            if (!n.isWall() && !n.isStart()) {
+                grid.setGoal(r, c);
+                clearOverlay();
+            }
+        } else if (currentDragTarget == DragTarget.PAINTING) {
+            switch (editMode) {
+                case WALL -> {
+                    if (n.isStart() || n.isGoal()) return;
+                    if (r == lastDragRow && c == lastDragCol) return;
+                    lastDragRow = r; lastDragCol = c;
+                    if (dragPainting != null) {
+                        if ( dragPainting && !n.isWall()) { grid.toggleWall(r, c); clearOverlay(); }
+                        if (!dragPainting &&  n.isWall()) { grid.toggleWall(r, c); clearOverlay(); }
+                    }
+                }
+                case ROAD, GRASS, WATER -> {
+                    if (n.isWall() || n.isStart() || n.isGoal()) return;
+                    if (r == lastDragRow && c == lastDragCol) return;
+                    lastDragRow = r; lastDragCol = c;
+                    Node.Terrain t = switch (editMode) {
+                        case GRASS -> Node.Terrain.GRASS;
+                        case WATER -> Node.Terrain.WATER;
+                        default    -> Node.Terrain.ROAD;
+                    };
+                    grid.setTerrain(r, c, t);
+                    clearOverlay();
+                }
+            }
         }
+
         redraw();
         if (onChanged != null) onChanged.run();
     }

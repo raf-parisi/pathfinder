@@ -20,7 +20,7 @@ public class DFS extends SearchAlgorithm {
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
 
         Deque<Node> stack    = new ArrayDeque<>();
         Set<Node>   visited  = new HashSet<>();
@@ -28,12 +28,18 @@ public class DFS extends SearchAlgorithm {
 
         stack.push(startNode);
         startNode.setGCost(0);
-        // Nota: Il nodo iniziale viene considerato OPEN quando entra nello stack
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
+        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
 
         while (!stack.isEmpty()) {
+            // Misuriamo l'occupazione totale in memoria (Stack + Visitati)
+            int currentMemory = stack.size() + visited.size();
+            if (currentMemory > maxNodesInMemory) {
+                maxNodesInMemory = currentMemory;
+            }
+
             Node current = stack.pop();
 
             if (visited.contains(current)) continue;
@@ -45,7 +51,7 @@ public class DFS extends SearchAlgorithm {
                 List<Node> path = reconstructPath(current);
                 long ms = System.currentTimeMillis() - start;
                 return new SearchResult(getName(), path, steps,
-                        path.size() - 1, expanded, ms, false);
+                        path.size() - 1, expanded, maxNodesInMemory, ms, false);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -58,11 +64,11 @@ public class DFS extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, System.currentTimeMillis() - start);
+        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
     }
 
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, long ms) {
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
         return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, ms, false);
+                Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }
