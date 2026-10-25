@@ -16,11 +16,11 @@ public class GreedyBestFirst extends SearchAlgorithm {
     @Override
     public SearchResult search(Grid grid) {
         grid.resetSearchState();
-        long start = System.currentTimeMillis();
+        long startNano = System.nanoTime();
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0.0);
 
         PriorityQueue<Node> open = new PriorityQueue<>(
                 Comparator.comparingDouble(Node::getHCost));
@@ -33,7 +33,7 @@ public class GreedyBestFirst extends SearchAlgorithm {
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
-        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
+        int maxNodesInMemory = 0;
 
         while (!open.isEmpty()) {
             int currentMemory = open.size() + closed.size();
@@ -49,9 +49,9 @@ public class GreedyBestFirst extends SearchAlgorithm {
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
-                long ms = System.currentTimeMillis() - start;
+                double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, maxNodesInMemory, ms, false);
+                        current.getGCost(), expanded, maxNodesInMemory, durationMs);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -67,11 +67,12 @@ public class GreedyBestFirst extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
+        double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
+        return noPath(steps, expanded, maxNodesInMemory, durationMs);
     }
 
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, double durationMs) {
         return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, maxMemory, ms, false);
+                Double.MAX_VALUE, expanded, maxMemory, durationMs);
     }
 }

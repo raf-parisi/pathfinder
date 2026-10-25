@@ -27,7 +27,7 @@ public class GridCanvas extends Canvas {
     private static final Color C_WALL    = Color.DARKSLATEGRAY;
     private static final Color C_START   = Color.GREEN;
     private static final Color C_GOAL    = Color.RED;
-    private static final Color C_OPEN    = Color.web("#89c4ff"); // Ciano per la frontiera
+    private static final Color C_OPEN    = Color.web("#008080");
     private static final Color C_CLOSED  = Color.web("#ffd580"); // Arancione chiaro per esplorati
     private static final Color C_PATH    = Color.ORANGE;
     private static final Color C_GRID    = Color.LIGHTGRAY;

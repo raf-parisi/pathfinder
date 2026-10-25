@@ -8,12 +8,12 @@ import javafx.scene.layout.*;
 import pathfinder.algorithms.UniformCostSearch;
 import pathfinder.gui.components.GridCanvas;
 import pathfinder.gui.components.StatsPanel;
+import pathfinder.ml.PerlinGridGenerator;
 import pathfinder.model.Grid;
 import pathfinder.model.Node;
 import pathfinder.model.SearchResult;
 
 public class AppController {
-
 
     private int rows = 50;
     private int cols = 80;
@@ -131,6 +131,22 @@ public class AppController {
             stats.setStatus("Griglia pulita.");
         });
 
+        // Pulsante per la generazione della griglia casuale
+        Button btnRandomGrid = new Button("🎲 Griglia Casuale (Muri Fitti)");
+        btnRandomGrid.setOnAction(e -> {
+            // Parametri: scala(0.1), acqua(0.3), erba(0.0), densità muri aumentata a 0.35 (35%)
+            PerlinGridGenerator generator = new PerlinGridGenerator(0.1, 0.3, 0.0, 0.35);
+            long randomSeed = System.currentTimeMillis();
+
+            grid = generator.generate(rows, cols, randomSeed);
+            grid.setStart(rows * 3 / 4, cols / 4);
+            grid.setGoal(rows / 4, cols * 3 / 4);
+
+            canvas.setGrid(grid);
+            resetAnimUI();
+            stats.setStatus("Griglia con muri fitti e terreni misti generata.");
+        });
+
         cbAlgorithms = new ComboBox<>();
         cbAlgorithms.getItems().addAll(
                 "--- NON INFORMATA ---",
@@ -164,7 +180,7 @@ public class AppController {
         HBox row = new HBox(8,
                 new Label("Griglia:"), tfRows, tfCols, new Label("px:"), tfCell, btnResize,
                 new Separator(Orientation.VERTICAL),
-                rbWall, rbRoad, rbGrass, rbWater, btnClear,
+                rbWall, rbRoad, rbGrass, rbWater, btnClear, btnRandomGrid,
                 new Separator(Orientation.VERTICAL),
                 new Label("Algo:"), cbAlgorithms,
                 new Separator(Orientation.VERTICAL),
@@ -224,7 +240,7 @@ public class AppController {
         content.getChildren().addAll(
                 createHelpItem("🖱️ Trascina Start / Goal:", "Clicca e trascina il nodo Start (verde 'S') o Goal (rosso 'G') per spostarli."),
                 createHelpItem("✏️ Disegno e Terreni:", "Seleziona Muri, Strada, Erba o Acqua in alto e trascina il mouse sulla griglia per dipingere."),
-                createHelpItem("🎨 Colori Animazione:", "• Ciano: Frontiera \n• Arancione chiaro: Nodi esplorati\n• Arancione scuro: Percorso finale")
+                createHelpItem("🎨 Colori Animazione:", "• Giallo Dorato: Frontiera \n• Arancione chiaro: Nodi esplorati\n• Arancione scuro: Percorso finale")
         );
 
         alert.getDialogPane().setContent(content);

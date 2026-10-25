@@ -16,11 +16,11 @@ public class BFS extends SearchAlgorithm {
     @Override
     public SearchResult search(Grid grid) {
         grid.resetSearchState();
-        long start = System.currentTimeMillis();
+        long startNano = System.nanoTime();
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0.0);
 
         Queue<Node> frontier   = new ArrayDeque<>();
         Set<Node>   discovered = new HashSet<>();
@@ -32,10 +32,9 @@ public class BFS extends SearchAlgorithm {
         steps.add(new SearchStep(startNode, NodeState.OPEN));
 
         int expanded = 0;
-        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
+        int maxNodesInMemory = 0;
 
         while (!frontier.isEmpty()) {
-            // Misuriamo l'occupazione totale in memoria (Frontiera + Visitati)
             int currentMemory = frontier.size() + discovered.size();
             if (currentMemory > maxNodesInMemory) {
                 maxNodesInMemory = currentMemory;
@@ -47,11 +46,9 @@ public class BFS extends SearchAlgorithm {
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
-                long ms = System.currentTimeMillis() - start;
-                boolean allRoad = path.stream()
-                        .allMatch(n -> n.getTerrain() == Node.Terrain.ROAD);
+                double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, maxNodesInMemory, ms, allRoad);
+                        current.getGCost(), expanded, maxNodesInMemory, durationMs);
             }
 
             for (Node neighbor : grid.getNeighbors(current)) {
@@ -65,11 +62,7 @@ public class BFS extends SearchAlgorithm {
             }
         }
 
-        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
-    }
-
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
-        return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, maxMemory, ms, false);
+        double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
+        return noPath(steps, expanded, maxNodesInMemory, durationMs);
     }
 }

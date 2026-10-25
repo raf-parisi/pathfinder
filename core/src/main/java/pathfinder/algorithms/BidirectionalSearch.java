@@ -17,30 +17,30 @@ public class BidirectionalSearch extends SearchAlgorithm {
 
     @Override
     public SearchResult search(Grid grid) {
-        long startTime = System.currentTimeMillis();
+        long startNano = System.nanoTime();
         Node start = grid.getStartNode();
         Node goal = grid.getGoalNode();
 
         if (start == null || goal == null) {
-            return noPath(List.of(), 0, 0, System.currentTimeMillis() - startTime);
+            return noPath(List.of(), 0, 0, 0.0);
         }
 
         if (start.equals(goal)) {
             List<Node> path = List.of(start);
             List<SearchStep> singleStep = List.of(new SearchStep(start, NodeState.CLOSED));
-            return new SearchResult(getName(), path, singleStep, 0.0, 1, 1, System.currentTimeMillis() - startTime, true);
+            double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
+            return new SearchResult(getName(), path, singleStep, 0.0, 1, 1, durationMs);
         }
 
         Map<Node, Double> forwardCost = new HashMap<>();
         Map<Node, Double> backwardCost = new HashMap<>();
 
-        // Code di priorità ordinate in base al costo effettivo (stile UCS) corrette con lambda
         PriorityQueue<Node> forwardQueue = new PriorityQueue<>(
                 Comparator.comparingDouble((Node n) -> forwardCost.getOrDefault(n, Double.MAX_VALUE))
-                        .thenComparingInt(n -> n.hashCode()));
+                        .thenComparingInt(Node::hashCode));
         PriorityQueue<Node> backwardQueue = new PriorityQueue<>(
                 Comparator.comparingDouble((Node n) -> backwardCost.getOrDefault(n, Double.MAX_VALUE))
-                        .thenComparingInt(n -> n.hashCode()));
+                        .thenComparingInt(Node::hashCode));
 
         Map<Node, Node> forwardParent = new HashMap<>();
         Map<Node, Node> backwardParent = new HashMap<>();
@@ -71,7 +71,7 @@ public class BidirectionalSearch extends SearchAlgorithm {
                 maxNodesInMemory = currentMemory;
             }
 
-            // --- Espansione Forward (Cost-aware) ---
+            // --- Espansione Forward ---
             Node currentForward = forwardQueue.poll();
             if (forwardClosed.contains(currentForward)) continue;
             forwardClosed.add(currentForward);
@@ -94,7 +94,7 @@ public class BidirectionalSearch extends SearchAlgorithm {
                 }
             }
 
-            // --- Espansione Backward (Cost-aware) ---
+            // --- Espansione Backward ---
             Node currentBackward = backwardQueue.poll();
             if (backwardClosed.contains(currentBackward)) continue;
             backwardClosed.add(currentBackward);
@@ -118,13 +118,12 @@ public class BidirectionalSearch extends SearchAlgorithm {
             }
         }
 
-        long duration = System.currentTimeMillis() - startTime;
+        double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
 
         if (meetingNode == null) {
-            return noPath(steps, nodesExpanded, maxNodesInMemory, duration);
+            return noPath(steps, nodesExpanded, maxNodesInMemory, durationMs);
         }
 
-        // Ricostruzione del percorso completo
         List<Node> pathFromStart = new ArrayList<>();
         Node curr = meetingNode;
         while (curr != null) {
@@ -148,10 +147,10 @@ public class BidirectionalSearch extends SearchAlgorithm {
             totalCost += fullPath.get(i + 1).getCost();
         }
 
-        return new SearchResult(getName(), fullPath, steps, totalCost, nodesExpanded, maxNodesInMemory, duration, false);
+        return new SearchResult(getName(), fullPath, steps, totalCost, nodesExpanded, maxNodesInMemory, durationMs);
     }
 
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
-        return new SearchResult(getName(), List.of(), steps, Double.MAX_VALUE, expanded, maxMemory, ms, false);
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, double durationMs) {
+        return new SearchResult(getName(), List.of(), steps, Double.MAX_VALUE, expanded, maxMemory, durationMs);
     }
 }

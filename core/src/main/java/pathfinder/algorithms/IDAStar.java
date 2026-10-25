@@ -24,16 +24,16 @@ public class IDAStar extends SearchAlgorithm {
     @Override
     public SearchResult search(Grid grid) {
         grid.resetSearchState();
-        long start = System.currentTimeMillis();
+        long startNano = System.nanoTime();
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0.0);
 
         List<SearchStep> steps = new ArrayList<>();
         List<Node> path       = new ArrayList<>();
         int[]      expanded   = {0};
-        int[]      maxMem     = {0}; // <--- TRACCIAMENTO PICCO MEMORIA
+        int[]      maxMem     = {0};
 
         double threshold = manhattan(startNode, goalNode);
         startNode.setGCost(0);
@@ -50,9 +50,15 @@ public class IDAStar extends SearchAlgorithm {
 
             if (result == -1.0) {
                 List<Node> finalPath = new ArrayList<>(path);
-                long ms = System.currentTimeMillis() - start;
+
+                double totalCost = 0;
+                for (int i = 1; i < finalPath.size(); i++) {
+                    totalCost += finalPath.get(i).getCost();
+                }
+
+                double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
                 return new SearchResult(getName(), finalPath, steps,
-                        finalPath.size() - 1, expanded[0], maxMem[0], ms, true);
+                        totalCost, expanded[0], maxMem[0], durationMs);
             }
 
             if (result == Double.MAX_VALUE) break;
@@ -61,14 +67,14 @@ public class IDAStar extends SearchAlgorithm {
         }
 
         lastNodesExpanded = expanded[0];
-        return noPath(steps, expanded[0], maxMem[0], System.currentTimeMillis() - start);
+        double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
+        return noPath(steps, expanded[0], maxMem[0], durationMs);
     }
 
     private double dfs(Node current, Node goal, Grid grid,
                        List<Node> path, List<SearchStep> steps,
                        int[] expanded, int[] maxMem, double threshold, double g) {
 
-        // La memoria in IDA* corrisponde alla dimensione del percorso corrente (profondità stack)
         int currentMem = path.size();
         if (currentMem > maxMem[0]) {
             maxMem[0] = currentMem;
@@ -101,10 +107,5 @@ public class IDAStar extends SearchAlgorithm {
         }
 
         return min;
-    }
-
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
-        return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, maxMemory, ms, false);
     }
 }

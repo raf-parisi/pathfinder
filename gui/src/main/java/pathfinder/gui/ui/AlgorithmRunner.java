@@ -45,7 +45,14 @@ public class AlgorithmRunner {
                     Consumer<SearchResult> onDone,
                     Consumer<Throwable>    onError) {
 
-        SearchAlgorithm algo = findAlgorithm(algoName);
+        SearchAlgorithm algo;
+        try {
+            algo = findAlgorithm(algoName);
+        } catch (IllegalArgumentException ex) {
+            onError.accept(ex);
+            return;
+        }
+
         Grid copy = copyGrid(grid);
 
         Task<SearchResult> task = new Task<>() {
@@ -59,11 +66,14 @@ public class AlgorithmRunner {
         t.setDaemon(true);
         t.start();
     }
-
     private SearchAlgorithm findAlgorithm(String name) {
-        for (SearchAlgorithm a : algorithms)
-            if (a.getName().equals(name)) return a;
-
+        for (SearchAlgorithm a : algorithms) {
+            if (a.getName().equalsIgnoreCase(name) ||
+                    name.startsWith(a.getName()) ||
+                    a.getName().startsWith(name)) {
+                return a;
+            }
+        }
         throw new IllegalArgumentException("Algoritmo non trovato: " + name);
     }
 

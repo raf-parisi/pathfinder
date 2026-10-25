@@ -37,9 +37,8 @@ public abstract class SearchAlgorithm {
         return Math.sqrt(dr * dr + dc * dc);
     }
 
-    // Aggiornato per accettare la lista di SearchStep
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, long ms) {
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, double durationMs) {
         return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, ms, false);
+                Double.MAX_VALUE, expanded, maxMemory, durationMs);
     }
 }

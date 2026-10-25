@@ -8,7 +8,6 @@ import pathfinder.model.SearchResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.*;
 
 public class AlgorithmComparisonTest {
 
@@ -16,33 +15,55 @@ public class AlgorithmComparisonTest {
     private static final int PAIRS_PER_GRID = 5;
     private static final long TIMEOUT_MS = 200;
     private static final long SEED = 2026L;
-
-    private static final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private static final int NUM_WARMUP_GRIDS = 10;
+    private static final long WARMUP_SEED = 7L;
 
     public static void main(String[] args) {
         System.out.println("=== BENCHMARK COMPARATIVO ALGORITMI DI SEARCH ===");
-        System.out.println("Configurazione: " + NUM_GRIDS + " griglie, " + PAIRS_PER_GRID + " coppie/griglia, Timeout IDDFS/IDA*: " + TIMEOUT_MS + "ms\n");
+        System.out.println("Configurazione: " + NUM_GRIDS + " griglie, " + PAIRS_PER_GRID + " coppie/griglia, Timeout IDDFS/IDA*: " + TIMEOUT_MS + "ms");
+        System.out.println();
+        System.out.println("Legenda:");
+        System.out.println("  Nodi espansi, Max Mem., Tempo : medie calcolate solo sulle istanze risolte dal singolo algoritmo");
+        System.out.println("  Successo     : % di istanze in cui l'algoritmo trova un percorso (entro il timeout, dove previsto)");
+        System.out.println("  Ottimi/Succ. : % di soluzioni a costo ottimo tra quelle trovate");
+        System.out.println("  Overhead     : extra-costo medio rispetto all'ottimo, solo sulle soluzioni subottime");
+        System.out.println("  Max Mem.     : picco di nodi tenuti in memoria contemporaneamente (esclusa la lista degli step)");
+        System.out.println();
 
         int[][] dimensions = {{10, 10}, {20, 20}, {50, 80}};
 
+        System.out.println("Warm-up JIT in corso (risultati scartati)...");
+        runAllScenarios(dimensions, true);
+        System.gc();
+        System.out.println("Warm-up completato.\n");
+
+        runAllScenarios(dimensions, false);
+    }
+
+    private static void runAllScenarios(int[][] dimensions, boolean warmup) {
         for (int[] dim : dimensions) {
             int rows = dim[0];
             int cols = dim[1];
 
-            System.out.println("=========================================================================================");
-            System.out.printf("   DIMENSIONE GRIGLIA: %dx%d%n", rows, cols);
-            System.out.println("=========================================================================================");
+            if (!warmup) {
+                System.out.println("=========================================================================================================");
+                System.out.printf("   DIMENSIONE GRIGLIA: %dx%d%n", rows, cols);
+                System.out.println("=========================================================================================================");
+            }
 
-            runBenchmarkScenario(rows, cols, "SCENARIO A: Solo Strada", false, 0.0, false);
-            runBenchmarkScenario(rows, cols, "SCENARIO B: Strada + Muri", false, 0.20, true);
-            runBenchmarkScenario(rows, cols, "SCENARIO C: Terreni Variabili", true, 0.10, false);
+            runBenchmarkScenario(rows, cols, "SCENARIO A: Solo Strada", false, 0.0, false, warmup);
+            runBenchmarkScenario(rows, cols, "SCENARIO B: Strada + Muri Fitti (40%)", false, 0.40, true, warmup);
+            runBenchmarkScenario(rows, cols, "SCENARIO C: Terreni Variabili + Muri Fitti (40%)", true, 0.40, false, warmup);
         }
-
-        executor.shutdown();
     }
 
-    private static void runBenchmarkScenario(int rows, int cols, String scenarioTitle, boolean usePerlinFull, double density, boolean usePerlinWalls) {
-        System.out.printf("%n--- %s ---%n%n", scenarioTitle);
+    private static void runBenchmarkScenario(int rows, int cols, String scenarioTitle,
+                                             boolean usePerlinFull, double density, boolean usePerlinWalls,
+                                             boolean warmup) {
+        if (!warmup) System.out.printf("%n--- %s ---%n%n", scenarioTitle);
+
+        int numGrids = warmup ? NUM_WARMUP_GRIDS : NUM_GRIDS;
+        long baseSeed = warmup ? WARMUP_SEED : SEED;
 
         List<AlgorithmMetrics> metricsList = new ArrayList<>();
         metricsList.add(new AlgorithmMetrics("UCS"));
@@ -56,12 +77,12 @@ public class AlgorithmComparisonTest {
         metricsList.add(new AlgorithmMetrics("DFS"));
         metricsList.add(new AlgorithmMetrics("Bidirectional"));
 
-        Random seedRnd = new Random(SEED + rows * 31L + cols);
+        Random seedRnd = new Random(baseSeed + rows * 31L + cols);
         PerlinGridGenerator perlinGen = new PerlinGridGenerator(0.1, 0.3, 0.0, density);
 
         int totalPairs = 0;
 
-        for (int g = 0; g < NUM_GRIDS; g++) {
+        for (int g = 0; g < numGrids; g++) {
             long currentSeed = seedRnd.nextLong();
             Grid grid;
 
@@ -103,30 +124,32 @@ public class AlgorithmComparisonTest {
                     SearchAlgorithm algo = instantiateAlgorithm(m.name);
                     if (algo == null) continue;
 
-                    Grid copy = copyGrid(grid);
-
                     if (m.name.equals("IDDFS") || m.name.equals("IDA*")) {
-                        runWithTimeoutAndRecord(algo, copy, TIMEOUT_MS, m, optimalCost);
+                        runWithTimeoutAndRecord(algo, grid, TIMEOUT_MS, m, optimalCost);
                     } else {
-                        SearchResult res = algo.search(copy);
+                        SearchResult res = algo.search(copyGrid(grid));
                         m.recordResult(res, optimalCost);
                     }
                 }
             }
         }
 
+        if (warmup) return;
+
         if (totalPairs == 0) {
             System.out.println("Nessuna coppia valida testata.");
             return;
         }
 
-        System.out.printf("%-14s %12s %12s %9s %10s %12s %14s%n",
-                "Algoritmo", "Nodi espansi", "Max Mem.", "Tempo", "%Ottim.", "Overhead", "Fail/Timeout");
-        System.out.println("-".repeat(90));
+        System.out.printf("%-14s %12s %12s %9s %9s %13s %10s%n",
+                "Algoritmo", "Nodi espansi", "Max Mem.", "Tempo", "Successo", "Ottimi/Succ.", "Overhead");
+        System.out.println("-".repeat(87));
 
         for (AlgorithmMetrics m : metricsList) {
             m.printRow(totalPairs);
         }
+
+        System.out.println("(Nodi espansi, Max Mem. e Tempo: medie sulle sole istanze risolte da ciascun algoritmo)");
     }
 
     private static Grid generatePerlinWallGrid(int rows, int cols, double wallDensity, long seed) {
@@ -134,22 +157,13 @@ public class AlgorithmComparisonTest {
         return generator.generate(rows, cols, seed);
     }
 
-    private static void runWithTimeoutAndRecord(SearchAlgorithm algo, Grid grid, long timeoutMs, AlgorithmMetrics metrics, double optimalCost) {
-        Future<SearchResult> future = executor.submit(() -> algo.search(grid));
+    private static void runWithTimeoutAndRecord(SearchAlgorithm algo, Grid original, long timeoutMs, AlgorithmMetrics metrics, double optimalCost) {
+        Grid limited = new TimeLimitedGrid(original, timeoutMs);
         try {
-            SearchResult res = future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            SearchResult res = algo.search(limited);
             metrics.recordResult(res, optimalCost);
-        } catch (TimeoutException | InterruptedException | ExecutionException e) {
-            future.cancel(true);
-            long partialNodes = 0;
-            long partialMaxMem = 0;
-            if (algo instanceof IDAStar) {
-                partialNodes = ((IDAStar) algo).getLastNodesExpanded();
-            } else if (algo instanceof IterativeDeepeningDFS) {
-                partialNodes = ((IterativeDeepeningDFS) algo).getTotalNodesExpanded();
-                partialMaxMem = ((IterativeDeepeningDFS) algo).getMaxNodesInMemory();
-            }
-            metrics.recordTimeout(timeoutMs, partialNodes, partialMaxMem);
+        } catch (SearchTimeoutException e) {
+            metrics.recordTimeout();
         }
     }
 
@@ -190,11 +204,49 @@ public class AlgorithmComparisonTest {
         return copy;
     }
 
+    // ── supporto al timeout cooperativo ──────────────────────────────────
+
+    private static class SearchTimeoutException extends RuntimeException {
+        SearchTimeoutException() { super("timeout", null, false, false); }
+    }
+
+    private static class TimeLimitedGrid extends Grid {
+        private final long deadlineNs;
+        private int calls = 0;
+
+        TimeLimitedGrid(Grid source, long timeoutMs) {
+            super(source.getRows(), source.getCols());
+
+            for (int r = 0; r < source.getRows(); r++) {
+                for (int c = 0; c < source.getCols(); c++) {
+                    Node src = source.get(r, c);
+                    Node dst = this.get(r, c);
+                    if (src.isWall()) dst.setType(Node.Type.WALL);
+                    else              dst.setTerrain(src.getTerrain());
+                }
+            }
+            Node s = source.getStartNode();
+            Node g = source.getGoalNode();
+            if (s != null) setStart(s.getRow(), s.getCol());
+            if (g != null) setGoal(g.getRow(), g.getCol());
+
+            this.deadlineNs = System.nanoTime() + timeoutMs * 1_000_000L;
+        }
+
+        @Override
+        public List<Node> getNeighbors(Node node) {
+            if ((++calls & 63) == 0 && System.nanoTime() > deadlineNs) {
+                throw new SearchTimeoutException();
+            }
+            return super.getNeighbors(node);
+        }
+    }
+
     private static class AlgorithmMetrics {
         String name;
-        long totalExpanded = 0;
-        long totalMaxMemory = 0;
-        long totalTimeMs = 0;
+        long totalExpandedSuccess = 0;
+        long totalMaxMemorySuccess = 0;
+        double totalTimeMsSuccess = 0.0;
         int optimalCount = 0;
         int successCount = 0;
         double sumOverhead = 0;
@@ -205,16 +257,15 @@ public class AlgorithmComparisonTest {
         }
 
         void recordResult(SearchResult res, double optimalCost) {
-            totalExpanded += res.getNodesExpanded();
-            totalMaxMemory += res.getMaxNodesInMemory();
-            totalTimeMs += res.getExecutionTimeMs();
-
             if (!res.isPathFound()) {
                 timeoutsOrFailures++;
                 return;
             }
 
             successCount++;
+            totalExpandedSuccess += res.getNodesExpanded();
+            totalMaxMemorySuccess += res.getMaxNodesInMemory();
+            totalTimeMsSuccess += res.getExecutionTimeMs();
 
             boolean isOpt = Math.abs(res.getTotalCost() - optimalCost) < 1e-6;
             if (isOpt) {
@@ -225,24 +276,32 @@ public class AlgorithmComparisonTest {
             sumOverhead += overhead;
         }
 
-        void recordTimeout(long timeoutMs, long partialNodes, long partialMaxMem) {
+        void recordTimeout() {
             timeoutsOrFailures++;
-            totalExpanded += partialNodes;
-            totalMaxMemory += partialMaxMem;
-            totalTimeMs += timeoutMs;
         }
 
         void printRow(int totalPairs) {
-            double avgExp = (double) totalExpanded / totalPairs;
-            double avgMem = (double) totalMaxMemory / totalPairs;
-            double avgTime = (double) totalTimeMs / totalPairs;
-            double optPct = 100.0 * optimalCount / totalPairs;
+            String avgExpStr = successCount > 0 ? String.format("%.1f", (double) totalExpandedSuccess / successCount) : "-";
+            String avgMemStr = successCount > 0 ? String.format("%.1f", (double) totalMaxMemorySuccess / successCount) : "-";
+            String avgTimeStr = successCount > 0 ? String.format("%.2fms", totalTimeMsSuccess / successCount) : "-";
 
-            String ovhStr = successCount > 0 ? String.format("%.1f%%", sumOverhead / successCount) : "-";
-            String failStr = String.format("%d/%d", timeoutsOrFailures, totalPairs);
+            String successStr = String.format("%.1f%%", 100.0 * successCount / totalPairs);
+            String optimalStr = successCount > 0
+                    ? String.format("%.1f%%", 100.0 * optimalCount / successCount)
+                    : "-";
 
-            System.out.printf("%-14s %12.1f %12.1f %7.2fms %10.1f%% %12s %14s%n",
-                    name, avgExp, avgMem, avgTime, optPct, ovhStr, failStr);
+            int subOptimalSuccessCount = successCount - optimalCount;
+            String ovhStr;
+            if (subOptimalSuccessCount > 0) {
+                ovhStr = String.format("%.1f%%", sumOverhead / subOptimalSuccessCount);
+            } else if (successCount > 0) {
+                ovhStr = "0.0%";
+            } else {
+                ovhStr = "-";
+            }
+
+            System.out.printf("%-14s %12s %12s %9s %9s %13s %10s%n",
+                    name, avgExpStr, avgMemStr, avgTimeStr, successStr, optimalStr, ovhStr);
         }
     }
 }

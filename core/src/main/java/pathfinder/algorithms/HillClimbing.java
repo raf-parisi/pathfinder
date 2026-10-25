@@ -16,11 +16,11 @@ public class HillClimbing extends SearchAlgorithm {
     @Override
     public SearchResult search(Grid grid) {
         grid.resetSearchState();
-        long start = System.currentTimeMillis();
+        long startNano = System.nanoTime();
 
         Node startNode = grid.getStartNode();
         Node goalNode  = grid.getGoalNode();
-        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0);
+        if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0.0);
 
         Node current = startNode;
         Set<Node> visited = new HashSet<>();
@@ -28,11 +28,11 @@ public class HillClimbing extends SearchAlgorithm {
 
         current.setGCost(0);
         int expanded = 0;
-        int maxNodesInMemory = 0; // <--- TRACCIAMENTO PICCO MEMORIA
+        int maxNodesInMemory = 0;
         steps.add(new SearchStep(current, NodeState.OPEN));
 
         while (true) {
-            int currentMemory = visited.size() + 1; // visited + current node
+            int currentMemory = visited.size() + 1;
             if (currentMemory > maxNodesInMemory) {
                 maxNodesInMemory = currentMemory;
             }
@@ -43,9 +43,9 @@ public class HillClimbing extends SearchAlgorithm {
 
             if (current.equals(goalNode)) {
                 List<Node> path = reconstructPath(current);
-                long ms = System.currentTimeMillis() - start;
+                double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
                 return new SearchResult(getName(), path, steps,
-                        current.getGCost(), expanded, maxNodesInMemory, ms, false);
+                        current.getGCost(), expanded, maxNodesInMemory, durationMs);
             }
 
             Node best = null;
@@ -62,7 +62,7 @@ public class HillClimbing extends SearchAlgorithm {
             }
 
             if (best == null) {
-                break; // Minimo locale
+                break;
             }
 
             best.setGCost(current.getGCost() + best.getCost());
@@ -70,11 +70,12 @@ public class HillClimbing extends SearchAlgorithm {
             current = best;
         }
 
-        return noPath(steps, expanded, maxNodesInMemory, System.currentTimeMillis() - start);
+        double durationMs = (System.nanoTime() - startNano) / 1_000_000.0;
+        return noPath(steps, expanded, maxNodesInMemory, durationMs);
     }
 
-    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, long ms) {
+    protected SearchResult noPath(List<SearchStep> steps, int expanded, int maxMemory, double durationMs) {
         return new SearchResult(getName(), List.of(), steps,
-                Double.MAX_VALUE, expanded, maxMemory, ms, false);
+                Double.MAX_VALUE, expanded, maxMemory, durationMs);
     }
 }
