@@ -11,10 +11,6 @@
     <packaging>pom</packaging>
 
     <name>AI Pathfinder - Parent</name>
-    <description>
-        Progetto didattico per la visualizzazione e il confronto di algoritmi
-        di ricerca con euristica appresa tramite regressione lineare multipla.
-    </description>
 
     <modules>
         <module>core</module>

@@ -92,8 +92,6 @@ public class Grid {
                 if (nodes[r][c].isWall()) nodes[r][c].setType(Node.Type.FREE);
     }
 
-   // duplica la struttura della griglia per consentire calcoli e training ML in background
-   // senza interferire con l'interfaccia grafica
 
     public Grid copyWalls() {
         Grid copy = new Grid(rows, cols);

@@ -22,8 +22,10 @@ public class GreedyBestFirst extends SearchAlgorithm {
         Node goalNode  = grid.getGoalNode();
         if (startNode == null || goalNode == null) return noPath(List.of(), 0, 0, 0.0);
 
+
         PriorityQueue<Node> open = new PriorityQueue<>(
-                Comparator.comparingDouble(Node::getHCost));
+                Comparator.comparingDouble(Node::getHCost)
+                        .thenComparingInt(Node::hashCode));
         Set<Node>        closed = new HashSet<>();
         List<SearchStep> steps  = new ArrayList<>();
 

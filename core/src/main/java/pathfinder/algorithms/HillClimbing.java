@@ -29,6 +29,7 @@ public class HillClimbing extends SearchAlgorithm {
         current.setGCost(0);
         int expanded = 0;
         int maxNodesInMemory = 0;
+        // Manteniamo solo lo start come visitato/chiuso o tracciamo l'inizio
         steps.add(new SearchStep(current, NodeState.OPEN));
 
         while (true) {
@@ -53,7 +54,6 @@ public class HillClimbing extends SearchAlgorithm {
 
             for (Node neighbor : grid.getNeighbors(current)) {
                 if (visited.contains(neighbor)) continue;
-                steps.add(new SearchStep(neighbor, NodeState.OPEN));
                 double h = manhattan(neighbor, goalNode);
                 if (h < bestH) {
                     bestH = h;

@@ -71,7 +71,7 @@ public class BidirectionalSearch extends SearchAlgorithm {
                 maxNodesInMemory = currentMemory;
             }
 
-            // --- Espansione Forward ---
+
             Node currentForward = forwardQueue.poll();
             if (forwardClosed.contains(currentForward)) continue;
             forwardClosed.add(currentForward);
@@ -94,7 +94,7 @@ public class BidirectionalSearch extends SearchAlgorithm {
                 }
             }
 
-            // --- Espansione Backward ---
+
             Node currentBackward = backwardQueue.poll();
             if (backwardClosed.contains(currentBackward)) continue;
             backwardClosed.add(currentBackward);

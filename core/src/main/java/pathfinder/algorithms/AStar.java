@@ -20,7 +20,6 @@ public class AStar extends SearchAlgorithm {
         public int compareTo(QueueEntry o) {
             int cmp = Double.compare(this.fCost, o.fCost);
             if (cmp != 0) return cmp;
-            // A parità di fCost, preferisci nodi con gCost maggiore (più vicini al Goal)
             return Double.compare(o.gCost, this.gCost);
         }
     }
